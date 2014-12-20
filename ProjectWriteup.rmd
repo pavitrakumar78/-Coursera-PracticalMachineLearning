@@ -163,6 +163,7 @@ Balanced Accuracy      1.0000   1.0000   1.0000   1.0000   1.0000
 ```
 
 We can conclude from the above confusion matrix that out model has obtained 100% accuracy on classifying 25% of given test data and since it is also efficient - takes about ~2 minutes to train ~20k rows (full training data) and also gives high accuracy, further model tuning seems unnessary.
+So, we can expect the out of sample error to be very low or even non-existant which largely depends on the size of the training data.
 
 ##Predicting given test data for submission
 
@@ -198,4 +199,4 @@ pml_write_files(predicted_in_test)
 
 ##Conclusion
 
-The predicted data scored 100% on the course project submission, so we can conclude that using random forest as ouu training mode and cleaning and processing the data carefully we have a highly accuracte prediction model.
+The predicted data scored 100% (as expected from training result) on the course project submission, so we can conclude that using random forest as ouu training mode and cleaning and processing the data carefully we have a highly accuracte prediction model.
