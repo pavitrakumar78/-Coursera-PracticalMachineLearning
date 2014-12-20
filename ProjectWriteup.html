@@ -1,0 +1,158 @@
+
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>README.md</title><style></style></head><body>
+<h1 id="-coursera-practicalmachinelearning">[Coursera]PracticalMachineLearning</h1>
+<h2 id="practical-machine-learning-assignment-writeup">Practical Machine Learning Assignment Writeup</h2>
+<p>Our goal in this assignment is to build a predictive model to predict the correctness 
+of a participant&#39;s excercise form using data from accelerometers on the belt, forearm, arm, and dumbell.</p>
+<h2 id="data">Data</h2>
+<p>The data for this assignment is provided by Groupware@LES<br>Read more on Human Activity Recognition: <a href="http://groupware.les.inf.puc-rio.br/har">http://groupware.les.inf.puc-rio.br/har</a></p>
+<p>Training data can be downloaded from the below link:
+<a href="https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv">https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv</a></p>
+<p>Test data can be downloaded from the below link:
+<a href="https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv">https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv</a></p>
+<h2 id="analysis-in-r">Analysis in R</h2>
+<p>Libraries used for this assignment:</p>
+<pre><code class="lang-r"><span class="hljs-keyword">library</span>(caret)
+<span class="hljs-keyword">library</span>(randomForest)
+<span class="hljs-keyword">library</span>(doParallel)
+<span class="hljs-keyword">library</span>(<span class="hljs-string">"foreach"</span>)
+<span class="hljs-keyword">library</span>(<span class="hljs-string">"doSNOW"</span>)
+</code></pre>
+<p>Setting seed for reproducibility</p>
+<pre><code class="lang-r">set.seed(<span class="hljs-number">1234</span>)
+</code></pre>
+<p>We first load the csv files obtained from the links given in the data section and process them.
+The below functions are used for loading and processing the data.</p>
+<p>The <code>ct</code> function is used to get the count of NA values of a column and the columns above a threshold value are deleted
+(in this case it is 20 - this suits both the training data and the testing data so no need to make 2 seperate functions
+or modifiy the existing one to process test data)</p>
+<pre><code class="lang-r">ct &lt;- <span class="hljs-keyword">function</span>(x){
+    <span class="hljs-keyword">return</span>(length(which(is.na(x))))
+}
+</code></pre>
+<p>The given data as it is has a lot of redundant columns for our analysis and also contains a lot of NA values.
+So, we use the <code>process_data</code> function to load the data and remove unwanted columns and NA values.</p>
+<pre><code class="lang-r">process_data &lt;- <span class="hljs-keyword">function</span>(dir){
+    processed_data &lt;- read.csv(dir)
+
+    <span class="hljs-comment">#deleting unwanted columns</span>
+    <span class="hljs-comment">#removing index,user_name,raw_time data fields,cvtd_time,new_window,num_window</span>
+
+    processed_data[<span class="hljs-number">1</span>:<span class="hljs-number">7</span>] = list(<span class="hljs-literal">NULL</span>)
+
+    <span class="hljs-comment">#cleaning data</span>
+    <span class="hljs-comment">#removing cols. with &gt;= 20 NA's</span>
+
+    <span class="hljs-comment"># removing the last column in the names list best it needs no conversion</span>
+    <span class="hljs-comment"># it is 'classe' column in training data and 'problem_id' in testing data (the last column in testing data is removed        #later)</span>
+
+    names_list &lt;- names(processed_data)[-length(names(processed_data))]
+
+    <span class="hljs-keyword">for</span>(n <span class="hljs-keyword">in</span> names_list){
+        processed_data[[n]] &lt;- as.numeric(as.character(processed_data[[n]]))
+        <span class="hljs-keyword">if</span>(ct(processed_data[[n]])&gt;=<span class="hljs-number">20</span>){
+            processed_data[[n]] &lt;- <span class="hljs-literal">NULL</span>
+        }
+    }
+    <span class="hljs-keyword">return</span>(processed_data)
+}
+</code></pre>
+<p>Before processing the dimensions of the training data are:</p>
+<pre><code class="lang-r">train_data &lt;- read.csv(<span class="hljs-string">"pml-training.csv"</span>)
+dim(train_data)
+
+<span class="hljs-comment">#[1] 19622 160</span>
+</code></pre>
+<p>After processing data:</p>
+<pre><code class="lang-r">train_data &lt;- process_data(<span class="hljs-string">"pml-training.csv"</span>)
+dim(train_data)
+
+<span class="hljs-comment">#[1] 19622 52</span>
+</code></pre>
+<p>We have reduced the column count to 1/3rd of original data.</p>
+<p>Now, We apply the same function on the given training data and split it into testing(25%) and training data(75%)
+to check for our model acuracy.</p>
+<pre><code class="lang-r">train_data &lt;- process_data(<span class="hljs-string">"pml-training.csv"</span>)
+inTrain &lt;- createDataPartition(y = train_data$classe,p = <span class="hljs-number">0.75</span>,list = <span class="hljs-literal">F</span>)
+
+training &lt;- train_data[inTrain,]
+testing &lt;- train_data[-inTrain,]
+
+dim(testing)
+<span class="hljs-comment">#[1] 4904   53</span>
+
+dim(training)
+<span class="hljs-comment">#[1] 14718    53</span>
+</code></pre>
+<p>We train using the random forest model.</p>
+<pre><code class="lang-r">registerDoSNOW(makeCluster(<span class="hljs-number">4</span>, type=<span class="hljs-string">"SOCK"</span>))
+
+modelFit &lt;- foreach(ntree=rep(<span class="hljs-number">150</span>, <span class="hljs-number">4</span>), .combine = combine, .packages = <span class="hljs-string">"randomForest"</span>) %dopar% randomForest(training, training$classe, ntree=ntree, keep.forest=<span class="hljs-literal">TRUE</span>)
+</code></pre>
+<p>Using the above trained model to predict the values of testing data.</p>
+<pre><code class="lang-r">predicted_in_train &lt;- predict(modelFit,newdata = testing)
+confusionMatrix(predicted_in_train, testing$classe)
+</code></pre>
+<h2 id="results-">Results:</h2>
+<pre><code class="lang-r">Confusion Matrix and Statistics
+
+          Reference
+Prediction    A    B    C    D    E
+         A <span class="hljs-number">1395</span>    <span class="hljs-number">0</span>    <span class="hljs-number">0</span>    <span class="hljs-number">0</span>    <span class="hljs-number">0</span>
+         B    <span class="hljs-number">0</span>  <span class="hljs-number">949</span>    <span class="hljs-number">0</span>    <span class="hljs-number">0</span>    <span class="hljs-number">0</span>
+         C    <span class="hljs-number">0</span>    <span class="hljs-number">0</span>  <span class="hljs-number">855</span>    <span class="hljs-number">0</span>    <span class="hljs-number">0</span>
+         D    <span class="hljs-number">0</span>    <span class="hljs-number">0</span>    <span class="hljs-number">0</span>  <span class="hljs-number">804</span>    <span class="hljs-number">0</span>
+         E    <span class="hljs-number">0</span>    <span class="hljs-number">0</span>    <span class="hljs-number">0</span>    <span class="hljs-number">0</span>  <span class="hljs-number">901</span>
+
+Overall Statistics
+
+               Accuracy : <span class="hljs-number">1</span>          
+                 <span class="hljs-number">95</span>% CI : (<span class="hljs-number">0.9992</span>, <span class="hljs-number">1</span>)
+    No Information Rate : <span class="hljs-number">0.2845</span>     
+    P-Value [Acc &gt; NIR] : &lt; <span class="hljs-number">2.2e-16</span>  
+
+                  Kappa : <span class="hljs-number">1</span>          
+ Mcnemar<span class="hljs-string">'s Test P-Value : NA         
+
+Statistics by Class:
+
+                     Class: A Class: B Class: C Class: D Class: E
+Sensitivity            1.0000   1.0000   1.0000   1.0000   1.0000
+Specificity            1.0000   1.0000   1.0000   1.0000   1.0000
+Pos Pred Value         1.0000   1.0000   1.0000   1.0000   1.0000
+Neg Pred Value         1.0000   1.0000   1.0000   1.0000   1.0000
+Prevalence             0.2845   0.1935   0.1743   0.1639   0.1837
+Detection Rate         0.2845   0.1935   0.1743   0.1639   0.1837
+Detection Prevalence   0.2845   0.1935   0.1743   0.1639   0.1837
+Balanced Accuracy      1.0000   1.0000   1.0000   1.0000   1.0000</span>
+</code></pre>
+<p>We can conclude from the above confusion matrix that out model has obtained 100% accuracy on classifying 25% of given test data and since it is also efficient - takes about ~2 minutes to train ~20k rows (full training data) and also gives high accuracy, further model tuning seems unnessary.</p>
+<h2 id="predicting-given-test-data-for-submission">Predicting given test data for submission</h2>
+<p>We use the same <code>data_process</code> fuction to process the testing data.</p>
+<pre><code class="lang-r">train_data &lt;- process_data(<span class="hljs-string">"pml-training.csv"</span>)
+test_data &lt;- process_data(<span class="hljs-string">"pml-testing.csv"</span>)
+y &lt;- train_data$classe
+train_data$classe &lt;- <span class="hljs-literal">NULL</span>
+
+registerDoSNOW(makeCluster(<span class="hljs-number">4</span>, type=<span class="hljs-string">"SOCK"</span>))
+modelFit &lt;- foreach(ntree=rep(<span class="hljs-number">200</span>, <span class="hljs-number">4</span>), .combine = combine, .packages = <span class="hljs-string">"randomForest"</span>) %dopar% randomForest(train_data, y, ntree=ntree, keep.forest=<span class="hljs-literal">TRUE</span>)
+
+test_data$problem_id &lt;- <span class="hljs-literal">NULL</span>
+</code></pre>
+<p>After processing the testing and training data, we predict the values using our trained model and write them into text files.</p>
+<pre><code class="lang-r">predicted_in_test &lt;- predict(modelFit,newdata = test_data)
+
+pml_write_files = <span class="hljs-keyword">function</span>(x){
+  n = length(x)
+  <span class="hljs-keyword">for</span>(i <span class="hljs-keyword">in</span> <span class="hljs-number">1</span>:n){
+    filename = paste0(<span class="hljs-string">"problem_id_"</span>,i,<span class="hljs-string">".txt"</span>)
+    write.table(x[i],file=filename,quote=<span class="hljs-literal">FALSE</span>,row.names=<span class="hljs-literal">FALSE</span>,col.names=<span class="hljs-literal">FALSE</span>)
+  }
+}
+
+pml_write_files(predicted_in_test)
+</code></pre>
+<h2 id="conclusion">Conclusion</h2>
+<p>The predicted data scored 100% on the course project submission, so we can conclude that using random forest as ouu training mode and cleaning and processing the data carefully we have a highly accuracte prediction model.</p>
+
+</body></html>
