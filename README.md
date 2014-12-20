@@ -126,7 +126,7 @@ predicted_in_train <- predict(modelFit,newdata = testing)
 confusionMatrix(predicted_in_train, testing$classe)
 ```
 
-###Results:
+##Results:
 
 ```r
 Confusion Matrix and Statistics
