@@ -5,9 +5,9 @@
 Our goal in this assignment is to build a predictive model to predict the correctness 
 of a participant's excercise form using data from accelerometers on the belt, forearm, arm, and dumbell.
 
-###Data
+##Data
 
-The data for this assignment is provided by Groupware@LES
+The data for this assignment is provided by Groupware@LES  
 Read more on Human Activity Recognition: http://groupware.les.inf.puc-rio.br/har
 
 Training data can be downloaded from the below link:
@@ -16,7 +16,7 @@ https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
 Test data can be downloaded from the below link:
 https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
 
-###Analysis in R
+##Analysis in R
 
 Libraries used for this assignment:
 
@@ -126,7 +126,8 @@ predicted_in_train <- predict(modelFit,newdata = testing)
 confusionMatrix(predicted_in_train, testing$classe)
 ```
 
-Results:
+###Results:
+
 ```r
 Confusion Matrix and Statistics
 
@@ -163,7 +164,7 @@ Balanced Accuracy      1.0000   1.0000   1.0000   1.0000   1.0000
 
 We can conclude from the above confusion matrix that out model has obtained 100% accuracy on classifying 25% of given test data and since it is also efficient - takes about ~2 minutes to train ~20k rows (full training data) and also gives high accuracy, further model tuning seems unnessary.
 
-###Predicting given test data for submission
+##Predicting given test data for submission
 
 We use the same ```data_process``` fuction to process the testing data.
 
@@ -195,6 +196,6 @@ pml_write_files = function(x){
 pml_write_files(predicted_in_test)
 ```
 
-###Conclusion
+##Conclusion
 
-The predicted data scored 100% on the course project submission, so we can conclude that for this dataset random forest and our feature selection has done a good job on classifying the data.
+The predicted data scored 100% on the course project submission, so we can conclude that using random forest as ouu training mode and cleaning and processing the data carefully we have a highly accuracte prediction model.
