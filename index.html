@@ -1,0 +1,227 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <title>-coursera-practicalmachinelearning by pavitrakumar78</title>
+
+    <link rel="stylesheet" href="stylesheets/styles.css">
+    <link rel="stylesheet" href="stylesheets/pygment_trac.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+        <h1>-coursera-practicalmachinelearning</h1>
+        <p>A course on practical machine learning using R</p>
+
+        <p class="view"><a href="https://github.com/pavitrakumar78/-Coursera-PracticalMachineLearning">View the Project on GitHub <small>pavitrakumar78/-Coursera-PracticalMachineLearning</small></a></p>
+
+
+        <ul>
+          <li><a href="https://github.com/pavitrakumar78/-Coursera-PracticalMachineLearning/zipball/master">Download <strong>ZIP File</strong></a></li>
+          <li><a href="https://github.com/pavitrakumar78/-Coursera-PracticalMachineLearning/tarball/master">Download <strong>TAR Ball</strong></a></li>
+          <li><a href="https://github.com/pavitrakumar78/-Coursera-PracticalMachineLearning">View On <strong>GitHub</strong></a></li>
+        </ul>
+      </header>
+      <section>
+        <h1>
+<a id="courserapracticalmachinelearning" class="anchor" href="#courserapracticalmachinelearning" aria-hidden="true"><span class="octicon octicon-link"></span></a>[Coursera]PracticalMachineLearning</h1>
+
+<h2>
+<a id="practical-machine-learning-assignment-writeup" class="anchor" href="#practical-machine-learning-assignment-writeup" aria-hidden="true"><span class="octicon octicon-link"></span></a>Practical Machine Learning Assignment Writeup</h2>
+
+<p>Our goal in this assignment is to build a predictive model to predict the correctness 
+of a participant's excercise form using data from accelerometers on the belt, forearm, arm, and dumbell.</p>
+
+<h2>
+<a id="data" class="anchor" href="#data" aria-hidden="true"><span class="octicon octicon-link"></span></a>Data</h2>
+
+<p>The data for this assignment is provided by Groupware@LES<br>
+Read more on Human Activity Recognition: <a href="http://groupware.les.inf.puc-rio.br/har">http://groupware.les.inf.puc-rio.br/har</a></p>
+
+<p>Training data can be downloaded from the below link:
+<a href="https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv">https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv</a></p>
+
+<p>Test data can be downloaded from the below link:
+<a href="https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv">https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv</a></p>
+
+<h2>
+<a id="analysis-in-r" class="anchor" href="#analysis-in-r" aria-hidden="true"><span class="octicon octicon-link"></span></a>Analysis in R</h2>
+
+<p>Libraries used for this assignment:</p>
+
+<div class="highlight highlight-r"><pre>library(<span class="pl-vo">caret</span>)
+library(<span class="pl-vo">randomForest</span>)
+library(<span class="pl-vo">doParallel</span>)
+library(<span class="pl-s1"><span class="pl-pds">"</span>foreach<span class="pl-pds">"</span></span>)
+library(<span class="pl-s1"><span class="pl-pds">"</span>doSNOW<span class="pl-pds">"</span></span>)</pre></div>
+
+<p>Setting seed for reproducibility</p>
+
+<div class="highlight highlight-r"><pre>set.seed(<span class="pl-c1">1234</span>)</pre></div>
+
+<p>We first load the csv files obtained from the links given in the data section and process them.
+The below functions are used for loading and processing the data.</p>
+
+<p>The <code>ct</code> function is used to get the count of NA values of a column and the columns above a threshold value are deleted
+(in this case it is 20 - this suits both the training data and the testing data so no need to make 2 seperate functions
+or modifiy the existing one to process test data)</p>
+
+<div class="highlight highlight-r"><pre><span class="pl-en">ct</span> <span class="pl-k">&lt;-</span> <span class="pl-k">function</span>(<span class="pl-vo">x</span>){
+    <span class="pl-k">return</span>(length(which(is.na(<span class="pl-vo">x</span>))))
+}</pre></div>
+
+<p>The given data as it is has a lot of redundant columns for our analysis and also contains a lot of NA values.
+So, we use the <code>process_data</code> function to load the data and remove unwanted columns and NA values.</p>
+
+<div class="highlight highlight-r"><pre><span class="pl-en">process_data</span> <span class="pl-k">&lt;-</span> <span class="pl-k">function</span>(<span class="pl-vo">dir</span>){
+    <span class="pl-vo">processed_data</span> <span class="pl-k">&lt;-</span> read.csv(<span class="pl-vo">dir</span>)
+
+    <span class="pl-c">#deleting unwanted columns</span>
+    <span class="pl-c">#removing index,user_name,raw_time data fields,cvtd_time,new_window,num_window</span>
+
+    <span class="pl-vo">processed_data</span>[<span class="pl-c1">1</span><span class="pl-k">:</span><span class="pl-c1">7</span>] <span class="pl-k">=</span> <span class="pl-st">list</span>(<span class="pl-c1">NULL</span>)
+
+    <span class="pl-c">#cleaning data</span>
+    <span class="pl-c">#removing cols. with &gt;= 20 NA's</span>
+
+    <span class="pl-c"># removing the last column in the names list best it needs no conversion</span>
+    <span class="pl-c"># it is 'classe' column in training data and 'problem_id' in testing data (the last column in testing data is removed        #later)</span>
+
+    <span class="pl-vo">names_list</span> <span class="pl-k">&lt;-</span> names(<span class="pl-vo">processed_data</span>)[<span class="pl-k">-</span>length(names(<span class="pl-vo">processed_data</span>))]
+
+    <span class="pl-k">for</span>(<span class="pl-vo">n</span> <span class="pl-k">in</span> <span class="pl-vo">names_list</span>){
+        <span class="pl-vo">processed_data</span>[[<span class="pl-vo">n</span>]] <span class="pl-k">&lt;-</span> as.numeric(as.character(<span class="pl-vo">processed_data</span>[[<span class="pl-vo">n</span>]]))
+        <span class="pl-k">if</span>(ct(<span class="pl-vo">processed_data</span>[[<span class="pl-vo">n</span>]])<span class="pl-k">&gt;</span><span class="pl-k">=</span><span class="pl-c1">20</span>){
+            <span class="pl-vo">processed_data</span>[[<span class="pl-vo">n</span>]] <span class="pl-k">&lt;-</span> <span class="pl-c1">NULL</span>
+        }
+    }
+    <span class="pl-k">return</span>(<span class="pl-vo">processed_data</span>)
+}</pre></div>
+
+<p>Before processing the dimensions of the training data are:</p>
+
+<div class="highlight highlight-r"><pre><span class="pl-vo">train_data</span> <span class="pl-k">&lt;-</span> read.csv(<span class="pl-s1"><span class="pl-pds">"</span>pml-training.csv<span class="pl-pds">"</span></span>)
+dim(<span class="pl-vo">train_data</span>)
+
+<span class="pl-c">#[1] 19622 160</span></pre></div>
+
+<p>After processing data:</p>
+
+<div class="highlight highlight-r"><pre><span class="pl-vo">train_data</span> <span class="pl-k">&lt;-</span> process_data(<span class="pl-s1"><span class="pl-pds">"</span>pml-training.csv<span class="pl-pds">"</span></span>)
+dim(<span class="pl-vo">train_data</span>)
+
+<span class="pl-c">#[1] 19622 52</span></pre></div>
+
+<p>We have reduced the column count to 1/3rd of original data.</p>
+
+<p>Now, We apply the same function on the given training data and split it into testing(25%) and training data(75%)
+to check for our model acuracy.</p>
+
+<div class="highlight highlight-r"><pre><span class="pl-vo">train_data</span> <span class="pl-k">&lt;-</span> process_data(<span class="pl-s1"><span class="pl-pds">"</span>pml-training.csv<span class="pl-pds">"</span></span>)
+<span class="pl-vo">inTrain</span> <span class="pl-k">&lt;-</span> createDataPartition(<span class="pl-v">y</span> <span class="pl-k">=</span> <span class="pl-vo">train_data</span><span class="pl-k">$</span><span class="pl-vo">classe</span>,<span class="pl-v">p</span> <span class="pl-k">=</span> <span class="pl-c1">0.75</span>,<span class="pl-v">list</span> <span class="pl-k">=</span> <span class="pl-c1">F</span>)
+
+<span class="pl-vo">training</span> <span class="pl-k">&lt;-</span> <span class="pl-vo">train_data</span>[<span class="pl-vo">inTrain</span>,]
+<span class="pl-vo">testing</span> <span class="pl-k">&lt;-</span> <span class="pl-vo">train_data</span>[<span class="pl-k">-</span><span class="pl-vo">inTrain</span>,]
+
+dim(<span class="pl-vo">testing</span>)
+<span class="pl-c">#[1] 4904   53</span>
+
+dim(<span class="pl-vo">training</span>)
+<span class="pl-c">#[1] 14718    53</span></pre></div>
+
+<p>We train using the random forest model.</p>
+
+<div class="highlight highlight-r"><pre>registerDoSNOW(makeCluster(<span class="pl-c1">4</span>, <span class="pl-v">type</span><span class="pl-k">=</span><span class="pl-s1"><span class="pl-pds">"</span>SOCK<span class="pl-pds">"</span></span>))
+
+<span class="pl-vo">modelFit</span> <span class="pl-k">&lt;-</span> foreach(<span class="pl-v">ntree</span><span class="pl-k">=</span>rep(<span class="pl-c1">150</span>, <span class="pl-c1">4</span>), <span class="pl-v">.combine</span> <span class="pl-k">=</span> <span class="pl-vo">combine</span>, <span class="pl-v">.packages</span> <span class="pl-k">=</span> <span class="pl-s1"><span class="pl-pds">"</span>randomForest<span class="pl-pds">"</span></span>) %<span class="pl-vo">dopar</span>% randomForest(<span class="pl-vo">training</span>, <span class="pl-vo">training</span><span class="pl-k">$</span><span class="pl-vo">classe</span>, <span class="pl-v">ntree</span><span class="pl-k">=</span><span class="pl-vo">ntree</span>, <span class="pl-v">keep.forest</span><span class="pl-k">=</span><span class="pl-c1">TRUE</span>)</pre></div>
+
+<p>Using the above trained model to predict the values of testing data.</p>
+
+<div class="highlight highlight-r"><pre><span class="pl-vo">predicted_in_train</span> <span class="pl-k">&lt;-</span> predict(<span class="pl-vo">modelFit</span>,<span class="pl-v">newdata</span> <span class="pl-k">=</span> <span class="pl-vo">testing</span>)
+confusionMatrix(<span class="pl-vo">predicted_in_train</span>, <span class="pl-vo">testing</span><span class="pl-k">$</span><span class="pl-vo">classe</span>)</pre></div>
+
+<h2>
+<a id="results" class="anchor" href="#results" aria-hidden="true"><span class="octicon octicon-link"></span></a>Results:</h2>
+
+<div class="highlight highlight-r"><pre><span class="pl-vo">Confusion</span> <span class="pl-vo">Matrix</span> <span class="pl-vo">and</span> <span class="pl-vo">Statistics</span>
+
+          <span class="pl-vo">Reference</span>
+<span class="pl-vo">Prediction</span>    <span class="pl-vo">A</span>    <span class="pl-vo">B</span>    <span class="pl-vo">C</span>    <span class="pl-vo">D</span>    <span class="pl-vo">E</span>
+         <span class="pl-vo">A</span> <span class="pl-c1">1395</span>    <span class="pl-c1">0</span>    <span class="pl-c1">0</span>    <span class="pl-c1">0</span>    <span class="pl-c1">0</span>
+         <span class="pl-vo">B</span>    <span class="pl-c1">0</span>  <span class="pl-c1">949</span>    <span class="pl-c1">0</span>    <span class="pl-c1">0</span>    <span class="pl-c1">0</span>
+         <span class="pl-vo">C</span>    <span class="pl-c1">0</span>    <span class="pl-c1">0</span>  <span class="pl-c1">855</span>    <span class="pl-c1">0</span>    <span class="pl-c1">0</span>
+         <span class="pl-vo">D</span>    <span class="pl-c1">0</span>    <span class="pl-c1">0</span>    <span class="pl-c1">0</span>  <span class="pl-c1">804</span>    <span class="pl-c1">0</span>
+         <span class="pl-vo">E</span>    <span class="pl-c1">0</span>    <span class="pl-c1">0</span>    <span class="pl-c1">0</span>    <span class="pl-c1">0</span>  <span class="pl-c1">901</span>
+
+<span class="pl-vo">Overall</span> <span class="pl-vo">Statistics</span>
+
+               <span class="pl-vo">Accuracy</span> <span class="pl-k">:</span> <span class="pl-c1">1</span>          
+                 <span class="pl-c1">95</span>% <span class="pl-vo">CI</span> <span class="pl-k">:</span> (<span class="pl-c1">0.9992</span>, <span class="pl-c1">1</span>)
+    <span class="pl-vo">No</span> <span class="pl-vo">Information</span> <span class="pl-vo">Rate</span> <span class="pl-k">:</span> <span class="pl-c1">0.2845</span>     
+    <span class="pl-vo">P</span><span class="pl-k">-</span><span class="pl-vo">Value</span> [<span class="pl-vo">Acc</span> <span class="pl-k">&gt;</span> <span class="pl-vo">NIR</span>] <span class="pl-k">:</span> <span class="pl-k">&lt;</span> <span class="pl-c1">2.2e-16</span>  
+
+                  <span class="pl-vo">Kappa</span> <span class="pl-k">:</span> <span class="pl-c1">1</span>          
+ <span class="pl-vo">Mcnemar</span><span class="pl-s1"><span class="pl-pds">'</span>s Test P-Value : NA         </span>
+<span class="pl-s1"></span>
+<span class="pl-s1">Statistics by Class:</span>
+<span class="pl-s1"></span>
+<span class="pl-s1">                     Class: A Class: B Class: C Class: D Class: E</span>
+<span class="pl-s1">Sensitivity            1.0000   1.0000   1.0000   1.0000   1.0000</span>
+<span class="pl-s1">Specificity            1.0000   1.0000   1.0000   1.0000   1.0000</span>
+<span class="pl-s1">Pos Pred Value         1.0000   1.0000   1.0000   1.0000   1.0000</span>
+<span class="pl-s1">Neg Pred Value         1.0000   1.0000   1.0000   1.0000   1.0000</span>
+<span class="pl-s1">Prevalence             0.2845   0.1935   0.1743   0.1639   0.1837</span>
+<span class="pl-s1">Detection Rate         0.2845   0.1935   0.1743   0.1639   0.1837</span>
+<span class="pl-s1">Detection Prevalence   0.2845   0.1935   0.1743   0.1639   0.1837</span>
+<span class="pl-s1">Balanced Accuracy      1.0000   1.0000   1.0000   1.0000   1.0000</span></pre></div>
+
+<p>We can conclude from the above confusion matrix that out model has obtained 100% accuracy on classifying 25% of given test data and since it is also efficient - takes about ~2 minutes to train ~20k rows (full training data) and also gives high accuracy, further model tuning seems unnessary.</p>
+
+<h2>
+<a id="predicting-given-test-data-for-submission" class="anchor" href="#predicting-given-test-data-for-submission" aria-hidden="true"><span class="octicon octicon-link"></span></a>Predicting given test data for submission</h2>
+
+<p>We use the same <code>data_process</code> fuction to process the testing data.</p>
+
+<div class="highlight highlight-r"><pre><span class="pl-vo">train_data</span> <span class="pl-k">&lt;-</span> process_data(<span class="pl-s1"><span class="pl-pds">"</span>pml-training.csv<span class="pl-pds">"</span></span>)
+<span class="pl-vo">test_data</span> <span class="pl-k">&lt;-</span> process_data(<span class="pl-s1"><span class="pl-pds">"</span>pml-testing.csv<span class="pl-pds">"</span></span>)
+<span class="pl-vo">y</span> <span class="pl-k">&lt;-</span> <span class="pl-vo">train_data</span><span class="pl-k">$</span><span class="pl-vo">classe</span>
+<span class="pl-vo">train_data</span><span class="pl-k">$</span><span class="pl-vo">classe</span> <span class="pl-k">&lt;-</span> <span class="pl-c1">NULL</span>
+
+registerDoSNOW(makeCluster(<span class="pl-c1">4</span>, <span class="pl-v">type</span><span class="pl-k">=</span><span class="pl-s1"><span class="pl-pds">"</span>SOCK<span class="pl-pds">"</span></span>))
+<span class="pl-vo">modelFit</span> <span class="pl-k">&lt;-</span> foreach(<span class="pl-v">ntree</span><span class="pl-k">=</span>rep(<span class="pl-c1">200</span>, <span class="pl-c1">4</span>), <span class="pl-v">.combine</span> <span class="pl-k">=</span> <span class="pl-vo">combine</span>, <span class="pl-v">.packages</span> <span class="pl-k">=</span> <span class="pl-s1"><span class="pl-pds">"</span>randomForest<span class="pl-pds">"</span></span>) %<span class="pl-vo">dopar</span>% randomForest(<span class="pl-vo">train_data</span>, <span class="pl-vo">y</span>, <span class="pl-v">ntree</span><span class="pl-k">=</span><span class="pl-vo">ntree</span>, <span class="pl-v">keep.forest</span><span class="pl-k">=</span><span class="pl-c1">TRUE</span>)
+
+<span class="pl-vo">test_data</span><span class="pl-k">$</span><span class="pl-vo">problem_id</span> <span class="pl-k">&lt;-</span> <span class="pl-c1">NULL</span></pre></div>
+
+<p>After processing the testing and training data, we predict the values using our trained model and write them into text files.</p>
+
+<div class="highlight highlight-r"><pre><span class="pl-vo">predicted_in_test</span> <span class="pl-k">&lt;-</span> predict(<span class="pl-vo">modelFit</span>,<span class="pl-v">newdata</span> <span class="pl-k">=</span> <span class="pl-vo">test_data</span>)
+
+<span class="pl-v">pml_write_files</span> <span class="pl-k">=</span> <span class="pl-k">function</span>(<span class="pl-vo">x</span>){
+  <span class="pl-v">n</span> <span class="pl-k">=</span> length(<span class="pl-vo">x</span>)
+  <span class="pl-k">for</span>(<span class="pl-vo">i</span> <span class="pl-k">in</span> <span class="pl-c1">1</span><span class="pl-k">:</span><span class="pl-vo">n</span>){
+    <span class="pl-v">filename</span> <span class="pl-k">=</span> paste0(<span class="pl-s1"><span class="pl-pds">"</span>problem_id_<span class="pl-pds">"</span></span>,<span class="pl-vo">i</span>,<span class="pl-s1"><span class="pl-pds">"</span>.txt<span class="pl-pds">"</span></span>)
+    write.table(<span class="pl-vo">x</span>[<span class="pl-vo">i</span>],<span class="pl-v">file</span><span class="pl-k">=</span><span class="pl-vo">filename</span>,<span class="pl-v">quote</span><span class="pl-k">=</span><span class="pl-c1">FALSE</span>,<span class="pl-v">row.names</span><span class="pl-k">=</span><span class="pl-c1">FALSE</span>,<span class="pl-v">col.names</span><span class="pl-k">=</span><span class="pl-c1">FALSE</span>)
+  }
+}
+
+pml_write_files(<span class="pl-vo">predicted_in_test</span>)</pre></div>
+
+<h2>
+<a id="conclusion" class="anchor" href="#conclusion" aria-hidden="true"><span class="octicon octicon-link"></span></a>Conclusion</h2>
+
+<p>The predicted data scored 100% on the course project submission, so we can conclude that using random forest as ouu training mode and cleaning and processing the data carefully we have a highly accuracte prediction model.</p>
+      </section>
+      <footer>
+        <p>This project is maintained by <a href="https://github.com/pavitrakumar78">pavitrakumar78</a></p>
+        <p><small>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></small></p>
+      </footer>
+    </div>
+    <script src="javascripts/scale.fix.js"></script>
+    
+  </body>
+</html>
